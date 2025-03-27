@@ -1,4 +1,5 @@
-from flask import Flask , jsonify , request
+from flask import Flask , jsonify , request , Response , redirect , url_for , session , abort
+from flask_login import LoginManager , UserMixin , login_required , login_user , logout_user 
 from pandas import read_excel
 import re
 import sqlite3
@@ -6,6 +7,74 @@ import requests
 import config
 
 app = Flask(__name__)
+
+# flask-login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login"
+
+app.config.update(
+    SECRET_KEY = config.SECRET_KEY
+)
+
+# silly user model
+class User(UserMixin):
+
+    def __init__(self, id):
+        self.id = id
+
+    def __repr__(self):
+        return "%d" % (self.id)
+
+
+# create some users with ids 1 to 20       
+users = User[0]
+
+# some protected url
+@app.route('/')
+@login_required
+def home():
+    return Response("Hello World!")
+
+# somewhere to login
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']        
+        if password == config.PASSWORD and username == config.USERNAME:
+            login_user(user)
+            return redirect('/')
+        else:
+            return abort(401)
+    else:
+        return Response('''
+        <form action="" method="post">
+            <p><input type=text name=username>
+            <p><input type=password name=password>
+            <p><input type=submit value=Login>
+        </form>
+        ''')
+
+
+# somewhere to logout
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    return Response('<p>Logged out</p>')
+
+
+# handle login failed
+@app.errorhandler(401)
+def page_not_found(error):
+    return Response('<p>Login failed</p>')
+    
+    
+# callback to reload the user object        
+@login_manager.user_loader
+def load_user(userid):
+    return User(userid)
 
 @app.route('/v1/ok')
 def health_check():
@@ -34,15 +103,15 @@ def send_sms(receptor , message):
     r = request.post(url , data)
     print(f"message *{message}* sent status code is {r.status_code}")
 
-def normalize_string(str):
+def normalize_string(data):
     persian_numerals = '۱۲۳۴۵۶۷۸۹۰'
     arabic_numerals = '١٢٣٤٥٦٧٨٩٠'
     english_numerals = '1234567890'
     for i in range(len(fron_char))
-        str = str.replace(from_char[i] , to_char[i])
-    str = str.upper()
-    str = re.sub(r'\W+' , '' , str)
-    return str
+        data = data.replace(from_char[i] , to_char[i])
+    data = data.upper()
+    data = re.sub(r'\W+' , '' , data)
+    return data
 
 def import_databace_from_exel:
     '''gets an exel file name and imports lookup data (data and failures) from it'''

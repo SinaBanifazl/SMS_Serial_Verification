@@ -1,2 +1,7 @@
 API_KEY = 'put your kavenegar API_KEY here'
-DATABACE_FILE_PATH = 'path the file wich is used bt sqli te'
+DATABACE_FILE_PATH = 'path the file wich is used bt sqlite'
+
+PASSWORD = 'pass'
+USERNAME = 'user'
+
+SECRET_KEY = 'top secret'
