@@ -1,7 +1,11 @@
-API_KEY = 'put your kavenegar API_KEY here'
-DATABACE_FILE_PATH = 'path the file wich is used bt sqlite'
+# this is a sample config file. rename it to `config.py` and edit accordingly
 
+API_KEY = 'put your API key from kavenegar here'
+DATABASE_FILE_PATH = 'path to the file which is used by sqlite'
+
+# login cedentials
+USERNAME = 'jadi'
 PASSWORD = 'pass'
-USERNAME = 'user'
 
-SECRET_KEY = 'top secret'
+# generate one strong secret key for flask.
+SECRET_KEY = 'random long string with alphanumeric + #()*&'
