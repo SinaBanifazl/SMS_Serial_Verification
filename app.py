@@ -1,19 +1,28 @@
 from flask import Flask , jsonify , request
 from pandas import read_excel
+import re
 import sqlite3
 import requests
 import config
+
 app = Flask(__name__)
 
+@app.route('/v1/ok')
+def health_check():
+    ret = {'message' : 'ok'}
+    return jsonify(ret), 200
 
 @app.route('/v1/process' , methods=['post'])
 def process():
     '''this is the call back from kavenagar . will get sender message and will check if it is valid, then answer back'''
     data = request.form
     sender = data["form"]
-    message = data["message"]
+    message = normalize_string(data["message"])
     print ({f"received {massage} from {processed}")
-    send_sms(sender , 'hi ' + message)
+           
+    answer = check_serial(message)
+
+    send_sms(sender , answer)
     ret = {"message" : "processed"}
     return jsonify(data) , 200
 
@@ -24,6 +33,16 @@ def send_sms(receptor , message):
             "receptor" : receptor}
     r = request.post(url , data)
     print(f"message *{message}* sent status code is {r.status_code}")
+
+def normalize_string(str):
+    persian_numerals = '۱۲۳۴۵۶۷۸۹۰'
+    arabic_numerals = '١٢٣٤٥٦٧٨٩٠'
+    english_numerals = '1234567890'
+    for i in range(len(fron_char))
+        str = str.replace(from_char[i] , to_char[i])
+    str = str.upper()
+    str = re.sub(r'\W+' , '' , str)
+    return str
 
 def import_databace_from_exel:
     '''gets an exel file name and imports lookup data (data and failures) from it'''
@@ -68,6 +87,8 @@ def import_databace_from_exel:
 
     invalid_counter = 0
     for index , (failed_serial_row) in df.iterrows():
+        start_serial = normalize_string(start_serial)
+        end_serial = normalize_string(end_serial)
         query = f'INSERT INTO serials VALUES ("{faid serial}")
         cue.execute(query)
         if invalid_counter % 10 == 0:
@@ -77,7 +98,22 @@ def import_databace_from_exel:
     conn.close()
 
 def check_serial():
-    pass
+    '''this tabe will get one serial number and return approporiate answer to that, after consulting the db'''
+    conn = sqlite3.connect(config.DATABACE_FILE_PATH)
+    cur = conn.cursor()
+
+    query = f"SELECT * FROM invalids WHERE invalid_serial == '{serial}'"
+    results = cur.execute(query)
+    if len(requests.fetchall()) == 1:
+        return 'this serial is among failed ones'
+
+    query = f"select * FROME serials WHERE start_serial  < '{serial}' and
+        end_serial > '{serial}'"
+    results = cir.execute(query)
+    if len(results.derchall()) == 1:
+        return 'I found your serial'
+
+    return 'it was not in the db'
 
 if __name__ == "__main__":
     app("0.0.0.0" , 5000 , debug=True)
