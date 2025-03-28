@@ -1,8 +1,9 @@
+import requests
+import re
+import os
 from flask import Flask, flash, jsonify, request, Response, redirect, url_for, session, abort
 from flask_login import LoginManager, UserMixin, login_required, login_user, logout_user
 from pandas import read_excel
-import requests
-import re
 import sqlite3
 import config
 from werkzeug.utils import secure_filename
@@ -11,11 +12,16 @@ app = Flask(__name__)
 
 UPLOAD_FOLDER = config.UPLOAD_FOLDER
 ALLOWED_EXTENSIONS = config.ALLOWED_EXTENSIONS
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # flask-login
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
+
+def allowed_file(filename):
+    return '.' in filename and \
+          filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 app.config.update(
     SECRET_KEY = config.SECRET_KEY
@@ -35,8 +41,39 @@ user = User(0)
 @app.route('/')
 @login_required
 def home():
-    return Response("<html><form ")
-
+    if request.method == 'POST':
+    # check if the post request has the file part
+        if 'file' not in request.files:
+            flash('No file part')
+            session_['message'] = 'No file part'
+            return redirect(request.url)
+        file = request.files['file']
+        # If the user does not select a file, the browser submits an
+        # empty file without a filename.
+        if file.filename == '':
+            flash('No selected file')
+            session['message'] = f'No selected file'
+            return redirect(request.url)
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+            row, failures = import_database_from_excel(file_path)
+            session['message'] =f'Imported {row} rows of serials and {failures} rows of failure'
+            os.remove(file_path)
+            return redirect('/')
+    message = session.get('message', None)
+    session['message'] = ''
+    return f'''
+    <!doctype html>
+    <title>Upload new File</title>
+    <h1>Upload new File</h1>
+    <h3>{message}</  h3>
+    <form method=post enctype=multipart/form-data>
+      <input type=file name=file>
+      <input type=submit value=Upload>
+    </form>
+    '''
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -218,7 +255,6 @@ def process():
     ret = {"message": "processed"}
     return jsonify(ret), 200
 
-if __name__ == "__main__":
-    import_database_from_excel('../data.xlsx') 
+if __name__ == "__main__": 
     app.run("0.0.0.0", 5000, debug=True)
     
