@@ -1,12 +1,16 @@
-from flask import Flask, jsonify, request, Response, redirect, url_for, session, abort
+from flask import Flask, flash, jsonify, request, Response, redirect, url_for, session, abort
 from flask_login import LoginManager, UserMixin, login_required, login_user, logout_user
 from pandas import read_excel
 import requests
 import re
 import sqlite3
 import config
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
+
+UPLOAD_FOLDER = config.UPLOAD_FOLDER
+ALLOWED_EXTENSIONS = config.ALLOWED_EXTENSIONS
 
 # flask-login
 login_manager = LoginManager()
@@ -31,7 +35,7 @@ user = User(0)
 @app.route('/')
 @login_required
 def home():
-    return Response("Hello World!")
+    return Response("<html><form ")
 
 
 @app.route("/login", methods=["GET", "POST"])
