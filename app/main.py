@@ -7,8 +7,17 @@ from pandas import read_excel
 import sqlite3
 import config
 from werkzeug.utils import secure_filename
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 app = Flask(__name__)
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    storage_uri="memory://",
+)
+
+
 
 UPLOAD_FOLDER = config.UPLOAD_FOLDER
 ALLOWED_EXTENSIONS = config.ALLOWED_EXTENSIONS
@@ -255,6 +264,5 @@ def process():
     ret = {"message": "processed"}
     return jsonify(ret), 200
 
-if __name__ == "__main__": 
-    app.run("0.0.0.0", 5000, debug=True)
-    
+if __name__ == "__main__":  
+    app.run("0.0.0.0", 5000, debug=True) 
