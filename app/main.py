@@ -1,11 +1,12 @@
-import requests
 import re
 import os
+import time
+import requests
 from flask import Flask, flash, jsonify, request, Response, redirect, url_for, abort, render_template
-from flask_login import LoginManager, UserMixin, login_required, login_user, logout_user
+from flask_login import LoginManager, UserMixin, login_required, login_user, logout_user, current_user
 from pandas import read_excel
 from werkzeug.utils import secure_filename
-import sqlite3
+import MySQLdb
 import config
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -26,12 +27,9 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
 
-
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-
 
 app.config.update(
     SECRET_KEY = config.SECRET_KEY
@@ -53,30 +51,49 @@ def home():
     if request.method == 'POST':
         # check if the post request has the file part
         if 'file' not in request.files:
-            flash('No file part')
+            flash('No file part', 'danger')
             return redirect(request.url)
         file = request.files['file']
         # if user does not select file, browser also
         # submit an empty part without filename
         if file.filename == '':
-            flash('No selected file')            
+            flash('No selected file', 'danger')
             return redirect(request.url)
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(file_path)
             rows, failures = import_database_from_excel(file_path)
-            flash(f'Imported {rows} rows of serials and {failures} rows of failure')
+            flash(f'Imported {rows} rows of serials and {failures} rows of failure', 'success')
             os.remove(file_path)
             return redirect('/')
-    
-    return render_template('index.html')
+
+    db = MySQLdb.connect(host=config.MYSQL_HOST,
+                             user=config.MYSQL_USERNAME,
+                             passwd=config.MYSQL_PASSWORD,
+                             db=config.MYSQL_DB_NAME)
+
+    cur = db.cursor()
+    cur.execute("SELECT * FROM PROCESSED_SMS ORDER BY date DESC LIMIT 5000")
+    all_smss = cur.fetchall()
+    smss = []
+    count = 0
+    for sms in all_smss:
+        count += 1
+        for i in range(1000):
+            count += 1
+            sender, message, answer, date = sms
+            smss.append({'sender': sender + '_' + str(count), 'message': message, 'answer': answer, 'date': date})
+
+    return render_template('index.html', data ={'smss': smss})
 
 
 
 @app.route("/login", methods=["GET", "POST"])
 @limiter.limit("10 per minute")
 def login():
+    if current_user.is_authenticated:
+        return redirect('/')
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
@@ -88,19 +105,29 @@ def login():
     else:
         return render_template('login.html')
 
+
+@app.route("/check_one_serial", methods=["POST"])
+@login_required
+def check_one_serial():
+    serial_to_check = request.form["serial"]
+    answer = check_serial(normalize_string(serial_to_check))
+    flash(answer, 'info')
+
+    return redirect('/')
+
 # somewhere to logout
 @app.route("/logout")
 @login_required
 def logout():
     logout_user()
-    flash('Logged out')
+    flash('Logged out', 'success')
     return redirect('/login')
 
 
 # handle login failed
 @app.errorhandler(401)
 def page_not_found(error):
-    flash('Login problem')
+    flash('Login problem', 'danger')
     return redirect('/login')
 
 
@@ -163,55 +190,56 @@ def import_database_from_excel(filepath):
     # Row	Reference Number	Description	Start Serial	End Serial	Date
 
     # TODO: make sure that the data is imported correctly, we need to backup the old one
-    # TODO: do some normaliziation
 
-    ## our sqlite database wil contain two tables: serials and invalids
-    conn = sqlite3.connect(config.DATABASE_FILE_PATH)
-    cur = conn.cursor()
+    db = MySQLdb.connect(host=config.MYSQL_HOST, user=config.MYSQL_USERNAME,
+            passwd=config.MYSQL_PASSWORD, db=config.MYSQL_DB_NAME)
+
+    cur = db.cursor()
 
     # remove the serials table if exists, then craete the new one
-    cur.execute('DROP TABLE IF EXISTS serials')
-    cur.execute("""CREATE TABLE IF NOT EXISTS serials (
+    cur.execute('DROP TABLE IF EXISTS serials;')
+    cur.execute("""CREATE TABLE serials (
         id INTEGER PRIMARY KEY,
-        ref TEXT,
-        desc TEXT,
-        start_serial TEXT,
-        end_serial TEXT,
-        date DATE);""")
-    conn.commit()
+        ref VARCHAR(200),
+        description VARCHAR(200),
+        start_serial CHAR(30),
+        end_serial CHAR(30),
+        date DATETIME);""")
+    db.commit()
 
     df = read_excel(filepath, 0)
     serials_counter = 0
-    for index, (line, ref, desc, start_serial, end_serial, date) in df.iterrows():
+    for index, (line, ref, description, start_serial, end_serial, date) in df.iterrows():
         start_serial = normalize_string(start_serial)
         end_serial = normalize_string(end_serial)
-        query = f'INSERT INTO serials VALUES ("{line}", "{ref}", "{desc}", "{start_serial}", "{end_serial}", "{date}");'
-        cur.execute(query)
+        cur.execute("INSERT INTO serials VALUES (%s, %s, %s, %s, %s, %s);", (
+          line, ref, description, start_serial, end_serial, date)
+        )
         # TODO: do some more error handling
         if serials_counter % 10 == 0:
-            conn.commit()
+            db.commit()
         serials_counter += 1
-    conn.commit()
+    db.commit()
 
     # now lets save the invalid serials.
 
     # remove the invalid table if exists, then craete the new one
-    cur.execute('DROP TABLE IF EXISTS invalids')
-    cur.execute("""CREATE TABLE IF NOT EXISTS invalids (
-        invalid_serial TEXT PRIMARY KEY);""")
-    conn.commit()
+    cur.execute('DROP TABLE IF EXISTS invalids;')
+    cur.execute("""CREATE TABLE invalids (
+        invalid_serial CHAR(30));""")
+    db.commit()
     invalid_counter = 0
     df = read_excel(filepath, 1)
     for index, (failed_serial, ) in df.iterrows():
-        query = f'INSERT INTO invalids VALUES ("{failed_serial}")'
-        cur.execute(query)
+        failed_serial = normalize_string(failed_serial)
+        cur.execute('INSERT INTO invalids VALUES (%s);', (failed_serial, ))
         # TODO: do some more error handling
         if invalid_counter % 10 == 0:
-            conn.commit()
+            db.commit()
         invalid_counter += 1
-    conn.commit()
+    db.commit()
 
-    conn.close()
+    db.close()
 
     return (serials_counter, invalid_counter)
 
@@ -219,19 +247,30 @@ def check_serial(serial):
     """ this function will get one serial number and return appropriate
     answer to that, after consulting the db
     """
-    conn = sqlite3.connect(config.DATABASE_FILE_PATH)
-    cur = conn.cursor()
 
-    query = f"SELECT * FROM invalids WHERE invalid_serial == '{serial}'"
-    results = cur.execute(query)
-    if len(results.fetchall()) > 0:
+    db = MySQLdb.connect(host=config.MYSQL_HOST,
+                         user=config.MYSQL_USERNAME,
+                         passwd=config.MYSQL_PASSWORD,
+                         db=config.MYSQL_DB_NAME)
+
+    cur = db.cursor()
+
+    results = cur.execute("SELECT * FROM invalids WHERE invalid_serial = %s", (serial, ))
+    if results > 0:
+        db.close()
         return 'this serial is among failed ones' #TODO: return the string provided by the customer
 
-    query = f"SELECT * FROM serials WHERE start_serial <= '{serial}' and end_serial >= '{serial}';"
-    results = cur.execute(query)
-    if len(results.fetchall()) == 1:
-        return 'I found your serial' # TODO: return the string provided by the customer
+    results = cur.execute("SELECT * FROM serials WHERE start_serial <= %s and end_serial >= %s", (serial, serial))
+    if results > 1:
+        db.close()
+        return 'I found your serial' # TODO: fix with proper message
+    elif results == 1:
+        ret = cur.fetchone()
+        desc = ret[2]
+        db.close()
+        return 'I found your serial: ' + desc # TODO: return the string provided by the customer
 
+    db.close()
     return 'it was not in the db'
 
 
@@ -243,13 +282,31 @@ def process():
     data = request.form
     sender = data["from"]
     message = normalize_string(data["message"])
-    print(f'received {message} from {sender}') #TODO: logging
+    print(f'received {message} from {sender}')
 
     answer = check_serial(message)
+
+    db = MySQLdb.connect(host=config.MYSQL_HOST,
+                         user=config.MYSQL_USERNAME,
+                         passwd=config.MYSQL_PASSWORD,
+                         db=config.MYSQL_DB_NAME)
+
+    cur = db.cursor()
+
+    now = time.strftime('%Y-%m-%d %H:%M:%S')
+    cur.execute("INSERT INTO PROCESSED_SMS (sender, message, answer, date) VALUES (%s, %s, %s, %s)",
+                (sender, message, answer, now))
+    db.commit()
+    db.close()
 
     send_sms(sender, answer)
     ret = {"message": "processed"}
     return jsonify(ret), 200
 
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('404.html'), 404
+
 if __name__ == "__main__":
+    #import_database_from_excel('../data.xlsx')
     app.run("0.0.0.0", 5000, debug=True)
