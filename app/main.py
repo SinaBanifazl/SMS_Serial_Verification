@@ -1,26 +1,24 @@
 import requests
 import re
 import os
-from flask import Flask, flash, jsonify, request, Response, redirect, url_for, session, abort
+from flask import Flask, flash, jsonify, request, Response, redirect, url_for, abort, render_template
 from flask_login import LoginManager, UserMixin, login_required, login_user, logout_user
 from pandas import read_excel
+from werkzeug.utils import secure_filename
 import sqlite3
 import config
-from werkzeug.utils import secure_filename
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 app = Flask(__name__)
-limiter = Limiter(
-    get_remote_address,
-    app=app,
-    storage_uri="memory://",
-)
-
-
+limiter = Limiter(app,
+                  key_func=get_remote_address
+                )
 
 UPLOAD_FOLDER = config.UPLOAD_FOLDER
 ALLOWED_EXTENSIONS = config.ALLOWED_EXTENSIONS
+CALL_BACK_TOKEN = config.CALL_BACK_TOKEN
+
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # flask-login
@@ -28,9 +26,12 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
 
+
 def allowed_file(filename):
     return '.' in filename and \
-          filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
 
 app.config.update(
     SECRET_KEY = config.SECRET_KEY
@@ -43,78 +44,64 @@ class User(UserMixin):
         return "%d" % (self.id)
 
 
-# create some users with ids 1 to 20
 user = User(0)
 
 # some protected url
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 @login_required
 def home():
     if request.method == 'POST':
-    # check if the post request has the file part
+        # check if the post request has the file part
         if 'file' not in request.files:
             flash('No file part')
-            session_['message'] = 'No file part'
             return redirect(request.url)
         file = request.files['file']
-        # If the user does not select a file, the browser submits an
-        # empty file without a filename.
+        # if user does not select file, browser also
+        # submit an empty part without filename
         if file.filename == '':
-            flash('No selected file')
-            session['message'] = f'No selected file'
+            flash('No selected file')            
             return redirect(request.url)
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(file_path)
-            row, failures = import_database_from_excel(file_path)
-            session['message'] =f'Imported {row} rows of serials and {failures} rows of failure'
+            rows, failures = import_database_from_excel(file_path)
+            flash(f'Imported {rows} rows of serials and {failures} rows of failure')
             os.remove(file_path)
             return redirect('/')
-    message = session.get('message', None)
-    session['message'] = ''
-    return f'''
-    <!doctype html>
-    <title>Upload new File</title>
-    <h1>Upload new File</h1>
-    <h3>{message}</  h3>
-    <form method=post enctype=multipart/form-data>
-      <input type=file name=file>
-      <input type=submit value=Upload>
-    </form>
-    '''
+    
+    return render_template('index.html')
+
+
 
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute")
 def login():
-    if request.method == 'POST': #TODO: stop the brute force
+    if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
         if password == config.PASSWORD and username == config.USERNAME:
             login_user(user)
-            return redirect('/') 
+            return redirect('/')
         else:
             return abort(401)
     else:
-        return Response('''
-        <form action="" method="post">
-            <p><input type=text name=username>
-            <p><input type=password name=password>
-            <p><input type=submit value=Login>
-        </form>
-        ''')
+        return render_template('login.html')
 
 # somewhere to logout
 @app.route("/logout")
 @login_required
 def logout():
     logout_user()
-    return Response('<p>Logged out</p>')
+    flash('Logged out')
+    return redirect('/login')
 
 
 # handle login failed
 @app.errorhandler(401)
 def page_not_found(error):
-    return Response('<p>Login failed</p>')
+    flash('Login problem')
+    return redirect('/login')
 
 
 # callback to reload the user object
@@ -136,7 +123,7 @@ def send_sms(receptor, message):
     data = {"message": message,
             "receptor": receptor}
     res = requests.post(url, data)
-    print(f"message *{message}* sent. status code is {res.status_code}")         
+    print(f"message *{message}* sent. status code is {res.status_code}")
 
 def normalize_string(data, fixed_size=30):
     from_persian_char = '۱۲۳۴۵۶۷۸۹۰'
@@ -157,7 +144,7 @@ def normalize_string(data, fixed_size=30):
 
     missing_zeros = fixed_size - len(all_alpha) - len(all_digit)
 
-    data = all_alpha + '0' * missing_zeros + all_digit    
+    data = all_alpha + '0' * missing_zeros + all_digit
 
     return data
 
@@ -172,7 +159,7 @@ def import_database_from_excel(filepath):
 
     returns two integers: (number of serial rows, number of invalid rows)
     """
-    # df contains lookup data in the form of 
+    # df contains lookup data in the form of
     # Row	Reference Number	Description	Start Serial	End Serial	Date
 
     # TODO: make sure that the data is imported correctly, we need to backup the old one
@@ -193,7 +180,7 @@ def import_database_from_excel(filepath):
         date DATE);""")
     conn.commit()
 
-    df = read_excel(filepath, 0) 
+    df = read_excel(filepath, 0)
     serials_counter = 0
     for index, (line, ref, desc, start_serial, end_serial, date) in df.iterrows():
         start_serial = normalize_string(start_serial)
@@ -214,7 +201,7 @@ def import_database_from_excel(filepath):
         invalid_serial TEXT PRIMARY KEY);""")
     conn.commit()
     invalid_counter = 0
-    df = read_excel(filepath, 1) 
+    df = read_excel(filepath, 1)
     for index, (failed_serial, ) in df.iterrows():
         query = f'INSERT INTO invalids VALUES ("{failed_serial}")'
         cur.execute(query)
@@ -237,10 +224,10 @@ def check_serial(serial):
 
     query = f"SELECT * FROM invalids WHERE invalid_serial == '{serial}'"
     results = cur.execute(query)
-    if len(results.fetchall()) == 1:
+    if len(results.fetchall()) > 0:
         return 'this serial is among failed ones' #TODO: return the string provided by the customer
 
-    query = f"SELECT * FROM serials WHERE start_serial < '{serial}' and end_serial > '{serial}';"
+    query = f"SELECT * FROM serials WHERE start_serial <= '{serial}' and end_serial >= '{serial}';"
     results = cur.execute(query)
     if len(results.fetchall()) == 1:
         return 'I found your serial' # TODO: return the string provided by the customer
@@ -248,7 +235,7 @@ def check_serial(serial):
     return 'it was not in the db'
 
 
-@app.route('/v1/process', methods=['POST'])
+@app.route(f'/v1/{CALL_BACK_TOKEN}/process', methods=['POST'])
 def process():
     """ this is a call back from KaveNegar. Will get sender and message and
     will check if it is valid, then answers back
@@ -264,5 +251,5 @@ def process():
     ret = {"message": "processed"}
     return jsonify(ret), 200
 
-if __name__ == "__main__":  
-    app.run("0.0.0.0", 5000, debug=True) 
+if __name__ == "__main__":
+    app.run("0.0.0.0", 5000, debug=True)
