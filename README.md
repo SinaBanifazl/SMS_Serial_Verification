@@ -1,12 +1,18 @@
 # sms_verification
 This project is done for Altech as a educational series.
 
-You should rename the `config.py.sample` to `config.py` and do proper changes.
+## How to run
+1. Install python3, pip3, virtualenv, MySQL in your system.
+2. Clone the project `https://github.com/jadijadi/sms_serial_verification && cd sms_serial_verification`
+3. rename the `config.py.sample` to `config.py` and do proper changes.
+4. db configs are in config.py, but you also need to add this table to the database manually:
+`CREATE TABLE PROCESSED_SMS (status ENUM('OK', 'FAILURE', 'DOUBLE', 'NOT-FOUND'), sender CHAR(20), message VARCHAR(400), answer VARCHAR(400), date DATETIME, INDEX(date, status));`
+5. Create a virtualenve named build using `virtualenv -p python3 build`
+6. Connect to virtualenv using `source build/bin/activate`
+7. Install packages using `pip3 install -r requirements.txt`
+8. Now environment is ready run it using `python3 app/main.py`
 
-## DB
-db configs are in config.py, but you also need to add this table to the database manually:
-
-    CREATE TABLE PROCESSED_SMS (sender CHAR(20), message VARCHAR(400), answer VARCHAR(400), date DATETIME);
+### Or you can use Dockerfile to deploy it to docker
 
 ## TODO
 - [x] Farhad seifi https://ngrok.com/
@@ -32,13 +38,15 @@ db configs are in config.py, but you also need to add this table to the database
 - [x] if we have 2 matches on serials, regurn a general OK message
 - [x] add altech logo from Downloads/logo.png ; top left
 - [x] close db connection in check_serial
-- [ ] count the failed insertions in db
+- [x] count the failed insertions in db
 - [x] regenerate requirements.txt with MySQLdb
-- [ ] proper texts are provided in Downloads/sms_reply_texts
+- [x] proper texts are provided in Downloads/sms_reply_texts
 - [x] is it possible to check a serial from the gui?
 - [x] dummy message for end to end test via SMS
 - [x] log all incomming smss
-- [ ] Atomic problem when I'm commiting every 10 inserts
+- [x] Atomic problem when I'm commiting every 10 inserts
 - [x] show smss at the bottom of the Dashboard
-- [ ] define indexes on mysql
-- [ ] add some nubmer to the cards
+- [x] define indexes on mysql
+- [x] trim too long sms input
+- [x] add some nubmer to the cards
+- [x] fix line 83 and 86 :D

@@ -55,52 +55,41 @@
                 <main>
                     <div class="container-fluid">
                         <h1 class="mt-4">Dashboard</h1>
-                        {% with messages = get_flashed_messages(with_categories=true) %}
-                        {% if messages %}
-                            {% for category, message in messages %}
-                            <div class="alert alert-{{ category }} alert-dismissible" role="alert">
-                                {{ message }}
-                                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                                    <span aria-hidden="true">&times;</span>
-                                </button>
-                            </div>
-                            {% endfor %}
-                        {% endif %}
-                        {% endwith %}   
+                        {% include 'alert.html' %}
                         <div class="row">
                             <div class="col-xl-3 col-md-6">
-                                <div class="card bg-primary text-white mb-4">
-                                    <div class="card-body">Primary Card</div>
+                                <div class="card bg-success text-white mb-4">
+                                    <div class="card-body">{{ data.ok }}</div>
                                     <div class="card-footer d-flex align-items-center justify-content-between">
-                                        <a class="small text-white stretched-link" href="#">View Details</a>
+                                        <div class="small text-white stretched-link" href="#">Total OK SMSs</div>
                                         <div class="small text-white"><i class="fas fa-angle-right"></i></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-xl-3 col-md-6">
+                                <div class="card bg-primary text-white mb-4">
+                                    <div class="card-body">{{ data.double }}</div>
+                                    <div class="card-footer d-flex align-items-center justify-content-between">
+                                        <div class="small text-white stretched-link" href="#">Presented in 2 series SMSs</div>
+                                        <div class="small text-white"></div>
                                     </div>
                                 </div>
                             </div>
                             <div class="col-xl-3 col-md-6">
                                 <div class="card bg-warning text-white mb-4">
-                                    <div class="card-body">Warning Card</div>
+                                    <div class="card-body">{{ data.failure }}</div>
                                     <div class="card-footer d-flex align-items-center justify-content-between">
-                                        <a class="small text-white stretched-link" href="#">View Details</a>
-                                        <div class="small text-white"><i class="fas fa-angle-right"></i></div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-xl-3 col-md-6">
-                                <div class="card bg-success text-white mb-4">
-                                    <div class="card-body">Success Card</div>
-                                    <div class="card-footer d-flex align-items-center justify-content-between">
-                                        <a class="small text-white stretched-link" href="#">View Details</a>
-                                        <div class="small text-white"><i class="fas fa-angle-right"></i></div>
+                                        <div class="small text-white stretched-link" href="#">Presented in failure SMSs</div>
+                                        <div class="small text-white"></div>
                                     </div>
                                 </div>
                             </div>
                             <div class="col-xl-3 col-md-6">
                                 <div class="card bg-danger text-white mb-4">
-                                    <div class="card-body">Danger Card</div>
+                                    <div class="card-body">{{ data.notfound }}</div>
                                     <div class="card-footer d-flex align-items-center justify-content-between">
-                                        <a class="small text-white stretched-link" href="#">View Details</a>
-                                        <div class="small text-white"><i class="fas fa-angle-right"></i></div>
+                                        <div class="small text-white stretched-link" href="#">Total Not-Found SMSs</div>
+                                        <div class="small text-white"></div>
                                     </div>
                                 </div>
                             </div>
@@ -148,6 +137,7 @@
                                     <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
                                         <thead>
                                             <tr>
+                                                <th>Status</th>
                                                 <th>Sender</th>
                                                 <th>Message</th>
                                                 <th>Answer</th>
@@ -156,6 +146,7 @@
                                         </thead>
                                         <tfoot>
                                             <tr>
+                                                <th>Status</th>
                                                 <th>Sender</th>
                                                 <th>Message</th>
                                                 <th>Answer</th>
@@ -165,6 +156,7 @@
                                         <tbody>
                                             {% for sms in data.smss %}
                                             <tr>
+                                                <td>{{sms.status}}</td>
                                                 <td>{{sms.sender}}</td>
                                                 <td>{{sms.message}}</td>
                                                 <td>{{sms.answer}}</td>
@@ -181,9 +173,9 @@
                 <footer class="py-4 bg-light mt-auto">
                     <div class="container-fluid">
                         <div class="d-flex align-items-center justify-content-between small">
-                            <div class="text-muted">Copyleft; Altech 2020</div>
+                            {% include 'copyleft.html' %}
                         </div>
-                    </div>
+                    </div>  
                 </footer>
             </div>
         </div>
